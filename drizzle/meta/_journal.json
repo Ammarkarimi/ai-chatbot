@@ -8,6 +8,13 @@
       "when": 1792089303837,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792124326353,
+      "tag": "0001_security_email_uploads",
+      "breakpoints": true
     }
   ]
 }

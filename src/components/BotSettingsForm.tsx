@@ -13,6 +13,8 @@ type Settings = {
   provider: "gemini" | "groq";
   model: string;
   temperature: number;
+  allowedDomains: string[];
+  visitorDailyLimit: number;
 };
 
 const MODEL_SUGGESTIONS = {
@@ -75,6 +77,7 @@ export function BotSettingsForm({
 }) {
   const router = useRouter();
   const [s, setS] = useState(initial);
+  const [domainsText, setDomainsText] = useState(initial.allowedDomains.join("\n"));
   const [geminiKey, setGeminiKey] = useState<string | undefined>(undefined);
   const [groqKey, setGroqKey] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<{ ok?: string; error?: string }>({});
@@ -89,7 +92,12 @@ export function BotSettingsForm({
     try {
       await api(`/api/bots/${botId}`, {
         method: "PATCH",
-        json: { ...s, geminiApiKey: geminiKey, groqApiKey: groqKey },
+        json: {
+          ...s,
+          allowedDomains: domainsText.split(/[\n,]+/).map((d) => d.trim()).filter(Boolean),
+          geminiApiKey: geminiKey,
+          groqApiKey: groqKey,
+        },
       });
       setGeminiKey(undefined);
       setGroqKey(undefined);
@@ -177,6 +185,46 @@ export function BotSettingsForm({
             <input id="temp" type="range" min={0} max={1} step={0.1} value={s.temperature} onChange={(e) => set("temperature", Number(e.target.value))} className="mt-2 w-full" />
             <p className="text-xs text-slate-500">Lower = more precise</p>
           </div>
+        </div>
+      </div>
+
+      <div className="card space-y-5 p-6">
+        <div>
+          <h2 className="font-semibold">Website security</h2>
+          <p className="mt-1 text-sm text-slate-600">Control where the chatbot can appear and how much one visitor can use it.</p>
+        </div>
+        <div>
+          <label className="label" htmlFor="domains">Allowed websites</label>
+          <textarea
+            id="domains"
+            rows={4}
+            className="input font-mono"
+            value={domainsText}
+            onChange={(e) => setDomainsText(e.target.value)}
+            placeholder={"example.com\n*.example.com\nshop.mybrand.io"}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            One domain per line. <code>example.com</code> also covers <code>www.example.com</code>; use{" "}
+            <code>*.example.com</code> for all subdomains. Leave empty to allow any website (not recommended once live).
+          </p>
+          {!domainsText.trim() && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Any website can currently embed this chatbot and use up your message allowance.
+            </p>
+          )}
+        </div>
+        <div className="max-w-xs">
+          <label className="label" htmlFor="visitor-limit">Messages per visitor per day</label>
+          <input
+            id="visitor-limit"
+            type="number"
+            min={1}
+            max={1000}
+            className="input"
+            value={s.visitorDailyLimit}
+            onChange={(e) => set("visitorDailyLimit", Math.max(1, Math.min(1000, Number(e.target.value) || 1)))}
+          />
+          <p className="mt-1 text-xs text-slate-500">Stops a single visitor from draining your monthly messages. Visitors are also limited to 8 messages per minute.</p>
         </div>
       </div>
 

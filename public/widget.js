@@ -13,8 +13,10 @@
 
   fetch(origin + "/api/public/bots/" + encodeURIComponent(botId))
     .then(function (r) {
-      if (!r.ok) throw new Error("Chatbot not found: " + botId);
-      return r.json();
+      return r.json().then(function (body) {
+        if (!r.ok) throw new Error((body && body.error) || "Chatbot not found: " + botId);
+        return body;
+      });
     })
     .then(mount)
     .catch(function (err) {
