@@ -6,7 +6,7 @@ import { ownedBotForApi } from "@/lib/api-auth";
 import { getPlan } from "@/lib/plans";
 import { isSupported } from "@/lib/ai/extract";
 import { cleanupAbandonedUploads, documentQuotaError, maxUploadMb } from "@/lib/documents";
-import { presignUpload, storageEnabled } from "@/lib/storage";
+import { presignUpload, storageMode } from "@/lib/storage";
 import { jsonError, zodMessage } from "@/lib/http";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -17,9 +17,14 @@ const schema = z.object({
   contentType: z.string().max(200).optional(),
 });
 
-/** Step 1 of a direct upload: reserve a document and return a presigned PUT URL. */
+/**
+ * Step 1 of a direct upload: reserve a document and say where the browser should send the file.
+ * Vercel Blob: the browser then calls upload() against /api/blob-upload with this pathname.
+ * S3: the browser PUTs to the returned presigned URL.
+ */
 export async function POST(req: Request, { params }: Ctx) {
-  if (!storageEnabled()) return jsonError("Direct uploads aren't configured on this server.", 501);
+  const mode = storageMode();
+  if (mode === "none") return jsonError("Direct uploads aren't configured on this server.", 501);
   const { user, bot } = await ownedBotForApi((await params).id);
   if (!user) return jsonError("Unauthorized", 401);
   if (!bot) return jsonError("Bot not found", 404);
@@ -53,5 +58,6 @@ export async function POST(req: Request, { params }: Ctx) {
   const storageKey = `uploads/${bot.id}/${doc.id}${ext}`;
   await db.update(documents).set({ storageKey }).where(eq(documents.id, doc.id));
 
-  return NextResponse.json({ documentId: doc.id, uploadUrl: await presignUpload(storageKey) });
+  if (mode === "vercel-blob") return NextResponse.json({ mode, documentId: doc.id, pathname: storageKey });
+  return NextResponse.json({ mode, documentId: doc.id, uploadUrl: await presignUpload(storageKey) });
 }

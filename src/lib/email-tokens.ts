@@ -21,13 +21,12 @@ async function issueToken(userId: string, type: TokenType) {
     .set({ usedAt: new Date() })
     .where(and(eq(emailTokens.userId, userId), eq(emailTokens.type, type), isNull(emailTokens.usedAt)));
   const token = randomBytes(32).toString("base64url");
-  await db.insert(emailTokens).values({
-    userId,
-    type,
-    tokenHash: hash(token),
-    expiresAt: new Date(Date.now() + TTL_MS[type]),
-  });
-  return token;
+  const [row] = await db
+    .insert(emailTokens)
+    .values({ userId, type, tokenHash: hash(token), expiresAt: new Date(Date.now() + TTL_MS[type]) })
+    .returning({ id: emailTokens.id });
+  // The row id doubles as the Resend idempotency key: one token, at most one email.
+  return { token, idempotencyKey: `${type}/${row.id}` };
 }
 
 /** Atomically marks a valid, unused, unexpired token as used. Returns the user id or null. */
@@ -67,9 +66,11 @@ export async function isTokenValid(token: string, type: TokenType) {
 }
 
 export async function sendVerificationEmail(user: Pick<User, "id" | "email" | "name">) {
-  const token = await issueToken(user.id, "verify_email");
+  const { token, idempotencyKey } = await issueToken(user.id, "verify_email");
   const url = `${APP_URL}/api/auth/verify-email?token=${token}`;
   await sendEmail({
+    category: "verify_email",
+    idempotencyKey,
     to: user.email,
     subject: `Confirm your email for ${APP_NAME}`,
     ...actionEmail({
@@ -83,9 +84,11 @@ export async function sendVerificationEmail(user: Pick<User, "id" | "email" | "n
 }
 
 export async function sendPasswordResetEmail(user: Pick<User, "id" | "email">) {
-  const token = await issueToken(user.id, "reset_password");
+  const { token, idempotencyKey } = await issueToken(user.id, "reset_password");
   const url = `${APP_URL}/reset-password?token=${token}`;
   await sendEmail({
+    category: "reset_password",
+    idempotencyKey,
     to: user.email,
     subject: `Reset your ${APP_NAME} password`,
     ...actionEmail({

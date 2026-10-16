@@ -27,7 +27,10 @@ const cases: [string | null, boolean][] = [
   ["http://localhost:3000", true], // APP_URL default
 ];
 for (const [origin, expected] of cases) assert.equal(isOriginAllowed(origin, list), expected, String(origin));
-assert.equal(isOriginAllowed("https://anything.com", []), true);
+// No domains yet: not live anywhere except our own origin.
+assert.equal(isOriginAllowed("https://anything.com", []), false);
+assert.equal(isOriginAllowed("http://localhost:3000", []), true);
+assert.equal(frameAncestors([]), "'self'");
 assert.equal(isOriginAllowed("https://shop.com", ["www.shop.com"]), true);
 assert.equal(isOriginAllowed("https://www.shop.com", ["www.shop.com"]), true);
 assert.equal(isOriginAllowed("https://blog.shop.com", ["www.shop.com"]), false);

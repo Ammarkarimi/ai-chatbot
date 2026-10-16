@@ -194,7 +194,9 @@ export function BotSettingsForm({
           <p className="mt-1 text-sm text-slate-600">Control where the chatbot can appear and how much one visitor can use it.</p>
         </div>
         <div>
-          <label className="label" htmlFor="domains">Allowed websites</label>
+          <label className="label" htmlFor="domains">
+            Allowed websites <span className="font-normal text-red-600">(required to go live)</span>
+          </label>
           <textarea
             id="domains"
             rows={4}
@@ -205,11 +207,12 @@ export function BotSettingsForm({
           />
           <p className="mt-1 text-xs text-slate-500">
             One domain per line. <code>example.com</code> also covers <code>www.example.com</code>; use{" "}
-            <code>*.example.com</code> for all subdomains. Leave empty to allow any website (not recommended once live).
+            <code>*.example.com</code> for all subdomains. The chatbot only appears on these websites.
           </p>
           {!domainsText.trim() && (
             <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Any website can currently embed this chatbot and use up your message allowance.
+              Not live yet: add at least one domain so the chatbot can appear on your website. Until then it only
+              works in the Playground and on its direct link.
             </p>
           )}
         </div>

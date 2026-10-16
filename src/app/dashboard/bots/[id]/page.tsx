@@ -4,7 +4,7 @@ import { loadOwnedBot } from "@/lib/bot-access";
 import { getPlan } from "@/lib/plans";
 import { KnowledgeManager } from "@/components/KnowledgeManager";
 import { maxUploadMb } from "@/lib/documents";
-import { storageEnabled } from "@/lib/storage";
+import { storageMode } from "@/lib/storage";
 
 // Training runs inside one request; anything still "processing" after this hit the function timeout.
 const STALE_MS = 15 * 60 * 1000;
@@ -20,7 +20,7 @@ export default async function KnowledgePage({ params }: { params: Promise<{ id: 
       botId={bot.id}
       maxDocs={plan.documentsPerBot}
       maxFileMb={maxUploadMb(plan)}
-      directUpload={storageEnabled()}
+      uploadMode={storageMode()}
       docs={docs.map((d) => {
         const stale = d.status === "processing" && Date.now() - d.createdAt.getTime() > STALE_MS;
         return {

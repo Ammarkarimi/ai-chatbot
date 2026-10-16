@@ -8,9 +8,10 @@ They paste one `<script>` tag into their website and a branded chat bubble appea
 ## Features
 
 - **Accounts:** email/password signup and login (bcrypt + signed httpOnly JWT cookie), multi-tenant.
-  Email verification and password reset via [Resend](https://resend.com). A reset signs out every other session.
-- **Training:** upload PDF, DOCX, TXT, MD and CSV files, or paste text. With an S3-compatible bucket configured,
-  browsers upload straight to storage (no serverless body-size limit) with a progress bar. Text is chunked and embedded with
+  Email verification and password reset via [Resend](https://resend.com) (official SDK, idempotent sends, retries).
+  A reset signs out every other session.
+- **Training:** upload PDF, DOCX, TXT, MD and CSV files, or paste text. With a private **Vercel Blob** store (or an
+  S3-compatible bucket) configured, browsers upload straight to storage (no serverless body-size limit) with a progress bar. Text is chunked and embedded with
   **Gemini `gemini-embedding-001`** (768 dims), then stored in **Postgres + pgvector** (HNSW index).
 - **Chat (RAG):** each question is embedded, the closest passages are retrieved and the answer is
   streamed from **Gemini** or **Groq** (chosen per bot). History is loaded server-side, never trusted from the browser.
@@ -60,7 +61,10 @@ Sign up, create a chatbot, upload a document, try it in **Playground**, then cop
 | `GEMINI_API_BASE` / `GROQ_API_BASE` | | Override API base URLs (proxies, gateways, local mocks) |
 | `STRIPE_*` | | Billing. When `STRIPE_SECRET_KEY` is unset, billing is disabled and everyone stays on Free |
 | `RESEND_API_KEY`, `EMAIL_FROM` | ✅ in production | Verification and password-reset emails. Unset: emails are printed to the server log |
-| `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | | Direct-to-storage uploads (R2, S3, Supabase, MinIO). Unset: files go through the app, capped at 4 MB on Vercel |
+| `EMAIL_REPLY_TO` | | Where replies to those emails go |
+| `BLOB_READ_WRITE_TOKEN` | | Private Vercel Blob store for large uploads (recommended on Vercel) |
+| `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | | Alternative: S3-compatible bucket (R2, S3, Supabase, MinIO). With neither, files go through the app, capped at 4 MB on Vercel |
+| `CLIENT_IP_HEADER` | | Self-hosting only: header with the visitor's real IP (see [Self-hosting](#self-hosting-without-vercel)) |
 | `S3_VIRTUAL_HOSTED` | | `true` for `bucket.host` style URLs instead of `host/bucket` |
 
 ### Stripe setup
@@ -76,28 +80,47 @@ Plan limits and prices shown in the UI live in `src/lib/plans.ts`.
 
 ### Email setup (Resend)
 
-1. Create an account at [resend.com](https://resend.com), add and verify your sending domain.
-2. Set `RESEND_API_KEY` and `EMAIL_FROM` (e.g. `BotForge <no-reply@yourdomain.com>`).
+1. Create an API key at [resend.com/api-keys](https://resend.com/api-keys) → `RESEND_API_KEY`.
+2. Add and verify your sending domain at [resend.com/domains](https://resend.com/domains) (a few DNS records), then set
+   `EMAIL_FROM="BotForge <no-reply@yourdomain.com>"`. For a first test you can use `onboarding@resend.dev`, but Resend then
+   only delivers to your own Resend account's email.
+3. Check it: `npm run email:test -- you@example.com`.
 
-New accounts can use the dashboard and Playground right away, but their widgets only go live after they click the
+Every email carries an idempotency key tied to its one-time token, so retries (on Resend 429/5xx, up to 3 attempts) never
+send duplicates, plus a `category` tag (`verify_email` / `reset_password`) for filtering in the Resend dashboard.
+
+New accounts can use the dashboard and Playground right away; their widgets go live only after they click the
 verification link. Accounts that existed before this feature were marked verified by the migration.
 
 ### Storage setup (large uploads)
 
-Example with **Cloudflare R2** (no egress fees; AWS S3 and Supabase Storage work the same way):
+Files only sit in storage for the few seconds between upload and training, then they're deleted.
 
-1. Create a bucket, then an API token with *Object Read & Write* on it. Set `S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`,
+**Option A: Vercel Blob (recommended when deploying on Vercel)**
+
+1. Vercel dashboard → your project → **Storage** → **Create** → **Blob** → set access to **Private** (customers' documents
+   must not be public) → connect it to the project.
+2. Vercel adds `BLOB_READ_WRITE_TOKEN` to the project. For local development copy it into `.env`
+   (or run `vercel env pull`).
+
+That's it: no CORS or lifecycle rules. The browser uploads with `@vercel/blob/client` (multipart for big files); the
+`/api/blob-upload` route only signs a token for the exact path reserved for that user's document, and puts the plan's size
+limit inside the token, so **Vercel itself rejects oversized files**.
+
+**Option B: any S3-compatible bucket** (Cloudflare R2, AWS S3, Supabase Storage, MinIO), for hosting outside Vercel
+
+1. Create a bucket and an API token with read/write on it. Set `S3_ENDPOINT` (R2: `https://<account-id>.r2.cloudflarestorage.com`),
    `S3_REGION=auto`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`.
 2. Add a **CORS rule** so browsers can upload from your app:
    ```json
    [{ "AllowedOrigins": ["https://YOUR_APP"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"], "MaxAgeSeconds": 3000 }]
    ```
-3. Recommended: a **lifecycle rule** deleting objects under `uploads/` after 1 day. Files are deleted right after training,
-   so this only catches abandoned uploads.
+3. Recommended: a **lifecycle rule** deleting objects under `uploads/` after 1 day, to catch abandoned uploads.
 
-Flow: `POST /api/bots/:id/uploads` returns a 15-minute presigned PUT URL → the browser uploads → `POST
-/api/bots/:id/documents/:docId/process` checks the real size in the bucket (the size the browser announced is never trusted),
-trains, then deletes the file.
+The browser PUTs to a 15-minute presigned URL; the server then checks the real object size (the size the browser
+announced is never trusted), trains and deletes the file.
+
+If `BLOB_READ_WRITE_TOKEN` is set it wins; with neither option, uploads go through the app itself.
 
 ## Deploying
 
@@ -141,15 +164,16 @@ drizzle/                  SQL migrations
 
 ## Security
 
-**Allowed websites (per bot, Settings → Website security).** One domain per line: `example.com` also covers `www.`,
-`*.example.com` covers every subdomain, and ports are supported for testing (`localhost:8080`). When the list isn't empty:
+**Allowed websites (per bot, Settings → Website security) are required to go live.** One domain per line:
+`example.com` also covers `www.`, `*.example.com` covers every subdomain, and ports are supported for testing
+(`localhost:8080`). A bot is **Live** once its owner verified their email and it has at least one domain; until then
+it only works in the Playground and on its direct link (served from our own domain). Enforcement:
 - `/embed/:id` is served with `Content-Security-Policy: frame-ancestors …`, so **browsers refuse to show the chat inside
   any other website**, even if someone copies the iframe by hand.
 - The widget config endpoint refuses other origins, so the bubble never appears there.
 - The chat API rejects requests whose `Origin` isn't allowed.
 
-An empty list allows every site, and the dashboard warns about it. Server-side scripts can fake headers, which is why
-rate limits exist too.
+Server-side scripts can fake headers, which is why rate limits exist too.
 
 **Rate limits** (fixed windows in Postgres, shared by all serverless instances, IPs stored only as keyed hashes):
 
@@ -163,8 +187,31 @@ rate limits exist too.
 | Password reset requests | 3 / hour per account, 10 / hour per IP |
 
 The Playground is owner-only and skips visitor limits; it still counts toward the monthly plan quota.
-Client IPs come from `X-Forwarded-For` (set correctly by Vercel and most proxies). If you self-host, put the app behind a
-proxy that overwrites that header.
+Client IPs come from `X-Forwarded-For` on Vercel; see below for other hosts.
+
+## Self-hosting (without Vercel)
+
+"Self-hosting" means running the app on a machine you manage instead of Vercel: a VPS (DigitalOcean, Hetzner, AWS EC2),
+a container platform (Railway, Render, Fly.io) or your own server, with `npm run build && npm start` or Docker.
+
+The one thing to get right is **how the app learns a visitor's IP**, because per-IP rate limits depend on it:
+
+- On **Vercel**, the platform writes the visitor's real IP into `X-Forwarded-For` and discards whatever the visitor sent.
+  Nothing to configure.
+- On your **own server**, `X-Forwarded-For` is just a header, and anyone can send `X-Forwarded-For: 1.2.3.4`. If the app
+  trusted it, an abuser could pretend to be a new visitor on every request and dodge the limits.
+
+So set `CLIENT_IP_HEADER` to the header *your* front proxy controls:
+
+| Setup | `CLIENT_IP_HEADER` |
+| --- | --- |
+| Vercel | leave unset |
+| Behind Cloudflare | `cf-connecting-ip` |
+| nginx with `proxy_set_header X-Real-IP $remote_addr;` | `x-real-ip` |
+| Railway / Render / Fly.io / a cloud load balancer | `x-forwarded-for` (they overwrite it); check your platform's docs |
+
+Also on self-hosted setups: run `npm run db:migrate` on deploy, use Option B storage (or none: there's no 4.5 MB limit
+outside Vercel), and serve the app over HTTPS.
 
 ## Tests
 

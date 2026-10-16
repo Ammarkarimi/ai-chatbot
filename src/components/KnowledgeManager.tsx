@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 import { api } from "@/lib/api-client";
 
 type Doc = {
@@ -39,13 +40,13 @@ export function KnowledgeManager({
   docs,
   maxDocs,
   maxFileMb,
-  directUpload,
+  uploadMode,
 }: {
   botId: string;
   docs: Doc[];
   maxDocs: number;
   maxFileMb: number;
-  directUpload: boolean;
+  uploadMode: "vercel-blob" | "s3" | "none";
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,18 +75,28 @@ export function KnowledgeManager({
     }
   }
 
-  /** Large-file path: browser -> storage bucket directly, then the server trains from there. */
+  /** Large-file path: browser -> Vercel Blob or S3 directly, then the server trains from there. */
   async function uploadDirect(file: File) {
     track(file.name, 0);
     let documentId: string | null = null;
     try {
-      const start = await api<{ documentId: string; uploadUrl: string }>(`/api/bots/${botId}/uploads`, {
-        method: "POST",
-        json: { name: file.name, size: file.size, contentType: file.type },
-      });
+      const start = await api<{ documentId: string; pathname?: string; uploadUrl?: string }>(
+        `/api/bots/${botId}/uploads`,
+        { method: "POST", json: { name: file.name, size: file.size, contentType: file.type } },
+      );
       documentId = start.documentId;
       router.refresh();
-      await putWithProgress(start.uploadUrl, file, (pct) => track(file.name, pct));
+      if (start.pathname) {
+        await uploadToBlob(start.pathname, file, {
+          access: "private",
+          handleUploadUrl: "/api/blob-upload",
+          clientPayload: JSON.stringify({ documentId }),
+          multipart: file.size > 8 * 1024 * 1024, // parallel, retried chunks for big files
+          onUploadProgress: ({ percentage }) => track(file.name, Math.round(percentage)),
+        });
+      } else {
+        await putWithProgress(start.uploadUrl!, file, (pct) => track(file.name, pct));
+      }
       track(file.name, null);
       await api(`/api/bots/${botId}/documents/${documentId}/process`, { method: "POST" });
       documentId = null;
@@ -106,7 +117,7 @@ export function KnowledgeManager({
         setError(`${file.name}: larger than the ${maxFileMb} MB limit.`);
         continue;
       }
-      if (directUpload) {
+      if (uploadMode !== "none") {
         await uploadDirect(file);
       } else {
         const body = new FormData();

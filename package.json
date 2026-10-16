@@ -9,9 +9,11 @@
     "lint": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "test": "tsx src/lib/domains.test.ts"
+    "test": "tsx src/lib/domains.test.ts",
+    "email:test": "tsx scripts/test-email.ts"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.0",
     "aws4fetch": "^1.0.20",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.4",
@@ -21,6 +23,7 @@
     "postgres": "^3.4.9",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "resend": "^6.31.0",
     "server-only": "^0.0.1",
     "stripe": "^23.0.0",
     "unpdf": "^1.9.0",

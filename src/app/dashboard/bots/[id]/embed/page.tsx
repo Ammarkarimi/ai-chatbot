@@ -1,6 +1,7 @@
 import { loadOwnedBot } from "@/lib/bot-access";
 import { APP_URL } from "@/lib/config";
 import { CopyButton } from "@/components/CopyButton";
+import { isBotLive } from "@/lib/domains";
 import Link from "next/link";
 
 export default async function EmbedCodePage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,22 +13,25 @@ export default async function EmbedCodePage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="space-y-6">
-      {!user.emailVerifiedAt && (
-        <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
-          Verify your email to activate this chatbot on your website. Until then it only works in the Playground.
-        </p>
-      )}
-      {bot.allowedDomains.length === 0 ? (
-        <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
-          <strong>Any website can embed this chatbot</strong> and use up your messages.{" "}
-          <Link href={`/dashboard/bots/${bot.id}/settings`} className="font-medium underline">Add your website&apos;s domain</Link>{" "}
-          to lock it down.
-        </p>
-      ) : (
+      {isBotLive(bot.allowedDomains, Boolean(user.emailVerifiedAt)) ? (
         <p className="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800">
-          Only works on: {bot.allowedDomains.join(", ")}.{" "}
+          <strong>Live</strong> on: {bot.allowedDomains.join(", ")}.{" "}
           <Link href={`/dashboard/bots/${bot.id}/settings`} className="font-medium underline">Change</Link>
         </p>
+      ) : (
+        <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">Not live yet. To show the chatbot on your website:</p>
+          <ul className="mt-2 space-y-1">
+            <li>{user.emailVerifiedAt ? "✅" : "⬜"} Verify your email (check your inbox)</li>
+            <li>
+              {bot.allowedDomains.length > 0 ? "✅" : "⬜"}{" "}
+              <Link href={`/dashboard/bots/${bot.id}/settings`} className="font-medium underline">
+                Add your website&apos;s domain
+              </Link>{" "}
+              in Settings → Website security
+            </li>
+          </ul>
+        </div>
       )}
       <div className="card p-6">
         <h2 className="font-semibold">Add the chat bubble to your website</h2>

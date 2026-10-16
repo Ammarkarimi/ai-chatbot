@@ -34,9 +34,12 @@ function hostMatches(host: string, hostname: string, pattern: string) {
   return target === pattern;
 }
 
-/** True when the request origin may use this bot. An empty allow-list means any website. */
+/**
+ * True when the request origin may use this bot. Our own origin (dashboard, Playground, direct
+ * link) always may; other websites only when listed. An empty list means the bot isn't live
+ * on any website yet.
+ */
 export function isOriginAllowed(origin: string | null | undefined, allowedDomains: string[]) {
-  if (allowedDomains.length === 0) return true;
   if (!origin || origin === "null") return false;
   let url: URL;
   try {
@@ -44,11 +47,16 @@ export function isOriginAllowed(origin: string | null | undefined, allowedDomain
   } catch {
     return false;
   }
-  if (url.origin === new URL(APP_URL).origin) return true; // our own dashboard / direct link
+  if (url.origin === new URL(APP_URL).origin) return true;
   return allowedDomains.some((entry) => patterns(entry).some((p) => hostMatches(url.host, url.hostname, p)));
 }
 
-/** CSP frame-ancestors value restricting which sites may iframe the chat. */
+/** A bot shows up on customers' websites only once it has a domain and a verified owner. */
+export function isBotLive(allowedDomains: string[], ownerEmailVerified: boolean) {
+  return allowedDomains.length > 0 && ownerEmailVerified;
+}
+
+/** CSP frame-ancestors value restricting which sites may iframe the chat ('self' only when the list is empty). */
 export function frameAncestors(allowedDomains: string[]) {
   const sources = allowedDomains.flatMap((entry) =>
     patterns(entry).flatMap((p) => [`https://${p}`, `http://${p}`]),

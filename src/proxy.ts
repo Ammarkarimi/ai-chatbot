@@ -23,9 +23,8 @@ async function embed(req: NextRequest, botId: string) {
   const res = NextResponse.next();
   if (!/^[0-9a-f-]{36}$/i.test(botId)) return res;
   const domains = await allowedDomainsFor(botId).catch(() => null);
-  if (domains && domains.length > 0) {
-    res.headers.set("Content-Security-Policy", `frame-ancestors ${frameAncestors(domains)}`);
-  }
+  // No domains yet => frame-ancestors 'self': the chat can't appear on any other website.
+  res.headers.set("Content-Security-Policy", `frame-ancestors ${frameAncestors(domains ?? [])}`);
   return res;
 }
 

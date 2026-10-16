@@ -32,6 +32,9 @@ export async function GET(req: Request, { params }: Ctx) {
     .where(eq(bots.id, botId))
     .limit(1);
   if (!row) return fail("Chatbot not found", 404);
+  if (row.allowedDomains.length === 0) {
+    return fail("This chatbot isn't live yet: add your website's domain in the chatbot's Settings → Website security.", 403);
+  }
   if (!isOriginAllowed(req.headers.get("origin"), row.allowedDomains)) {
     return fail("This website isn't in the chatbot's list of allowed websites.", 403);
   }
