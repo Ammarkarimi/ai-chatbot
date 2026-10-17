@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db, conversations, messages } from "@/lib/db";
 import { loadOwnedBot } from "@/lib/bot-access";
+import { LocalTime } from "@/components/LocalTime";
 
 const PAGE_SIZE = 25;
 
@@ -59,7 +60,7 @@ export default async function ConversationsPage({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{c.firstQuestion ?? "(no messages)"}</p>
                   <p className="text-xs text-slate-500">
-                    {c.messageCount} messages · {c.lastMessageAt.toLocaleString()}
+                    {c.messageCount} messages · <LocalTime iso={c.lastMessageAt.toISOString()} />
                   </p>
                 </div>
                 {c.source === "playground" && (

@@ -1,5 +1,6 @@
 import "server-only";
 import Stripe from "stripe";
+import { APP_URL } from "@/lib/config";
 
 let client: Stripe | null = null;
 
@@ -14,5 +15,5 @@ export function getStripe() {
 }
 
 export function appUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return APP_URL;
 }

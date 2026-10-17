@@ -1,6 +1,7 @@
 import { and, count, countDistinct, desc, eq, gte, sql } from "drizzle-orm";
 import { db, conversations, messages } from "@/lib/db";
 import { loadOwnedBot } from "@/lib/bot-access";
+import { LocalTime } from "@/components/LocalTime";
 
 const DAYS = 30;
 
@@ -95,7 +96,7 @@ export default async function AnalyticsPage({ params }: { params: Promise<{ id: 
             {latestQuestions.map((q, i) => (
               <li key={i} className="flex justify-between gap-4 px-6 py-3 text-sm">
                 <span className="min-w-0 truncate">{q.content}</span>
-                <span className="shrink-0 text-xs text-slate-400">{q.createdAt.toLocaleDateString()}</span>
+                <span className="shrink-0 text-xs text-slate-400"><LocalTime iso={q.createdAt.toISOString()} format="date" /></span>
               </li>
             ))}
           </ul>

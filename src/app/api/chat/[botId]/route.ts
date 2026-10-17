@@ -52,7 +52,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (user?.id !== bot.userId) return error("Not allowed", 403);
   } else {
     // Browsers always send Origin on POST, so other websites can't call the bot directly.
-    if (!isOriginAllowed(req.headers.get("origin"), bot.allowedDomains)) {
+    if (!isOriginAllowed(req.headers.get("origin"), bot.allowedDomains, new URL(req.url).origin)) {
       return error("This website isn't allowed to use this chatbot.", 403);
     }
     if (!row.ownerVerified) return error("This chatbot isn't active yet.", 403);

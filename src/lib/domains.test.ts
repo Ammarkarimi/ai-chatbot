@@ -35,5 +35,8 @@ assert.equal(isOriginAllowed("https://shop.com", ["www.shop.com"]), true);
 assert.equal(isOriginAllowed("https://www.shop.com", ["www.shop.com"]), true);
 assert.equal(isOriginAllowed("https://blog.shop.com", ["www.shop.com"]), false);
 assert.equal(isOriginAllowed("http://127.0.0.1:5500", ["127.0.0.1:5500"]), true);
-assert.match(frameAncestors(["example.com"]), /^'self' https:\/\/example\.com http:\/\/example\.com https:\/\/www\.example\.com/);
+// The origin the request was sent to (e.g. a preview deployment) counts as our own; others don't.
+assert.equal(isOriginAllowed("https://preview-abc.vercel.app", [], "https://preview-abc.vercel.app"), true);
+assert.equal(isOriginAllowed("https://evil.com", [], "https://preview-abc.vercel.app"), false);
+assert.match(frameAncestors(["example.com"]),/^'self' https:\/\/example\.com http:\/\/example\.com https:\/\/www\.example\.com/);
 console.log("domains: all tests passed");

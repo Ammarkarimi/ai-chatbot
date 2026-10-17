@@ -69,7 +69,9 @@ Sign up, create a chatbot, upload a document, try it in **Playground**, then cop
 
 ### Stripe setup
 
-1. Create two recurring Prices in Stripe (e.g. Pro $29/mo and Business $99/mo) and set `STRIPE_PRICE_PRO` and `STRIPE_PRICE_BUSINESS`.
+1. Create recurring monthly Prices in Stripe and set their ids: `STRIPE_PRICE_PRO` ($29) and `STRIPE_PRICE_BUSINESS` ($99) in USD,
+   plus `STRIPE_PRICE_PRO_INR` (₹1,999) and `STRIPE_PRICE_BUSINESS_INR` (₹6,999) in INR. The pricing pages have a USD / INR
+   switch (visitors in India start on INR); the amounts shown come from `src/lib/plans.ts`, so keep them in line with Stripe.
 2. Add a webhook endpoint `https://YOUR_APP/api/stripe/webhook` with the events
    `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated` and
    `customer.subscription.deleted`. Put its signing secret in `STRIPE_WEBHOOK_SECRET`.
@@ -78,7 +80,18 @@ Sign up, create a chatbot, upload a document, try it in **Playground**, then cop
 
 Plan limits and prices shown in the UI live in `src/lib/plans.ts`.
 
-### Email setup (Resend)
+### Email setup
+
+Pick one. If `SMTP_USER`/`SMTP_PASS` are set they're used; otherwise Resend; with neither, emails are only printed to
+the server log (fine locally, but nobody can verify in production). Check your setup with
+`npm run email:test -- you@example.com`.
+
+**Option A: Gmail (no domain needed).** Turn on 2-Step Verification for the Google account, create an
+[App Password](https://myaccount.google.com/apppasswords) and set `SMTP_USER=you@gmail.com` and `SMTP_PASS=<app password>`.
+Emails come from that Gmail address. Gmail allows about 500 emails a day, which is plenty for a launch. Other SMTP
+mailboxes (Zoho, Outlook…) work with `SMTP_HOST`/`SMTP_PORT`.
+
+**Option B: Resend (needs a domain you own).** Better deliverability and no daily cap. Remove the `SMTP_*` lines to use it.
 
 1. Create an API key at [resend.com/api-keys](https://resend.com/api-keys) → `RESEND_API_KEY`.
 2. Add and verify your sending domain at [resend.com/domains](https://resend.com/domains) (a few DNS records), then set
@@ -86,7 +99,7 @@ Plan limits and prices shown in the UI live in `src/lib/plans.ts`.
    only delivers to your own Resend account's email.
 3. Check it: `npm run email:test -- you@example.com`.
 
-Every email carries an idempotency key tied to its one-time token, so retries (on Resend 429/5xx, up to 3 attempts) never
+With Resend, every email carries an idempotency key tied to its one-time token, so retries (on Resend 429/5xx, up to 3 attempts) never
 send duplicates, plus a `category` tag (`verify_email` / `reset_password`) for filtering in the Resend dashboard.
 
 New accounts can use the dashboard and Playground right away; their widgets go live only after they click the
@@ -124,9 +137,30 @@ If `BLOB_READ_WRITE_TOKEN` is set it wins; with neither option, uploads go throu
 
 ## Deploying
 
-- **Vercel + Neon/Supabase** works out of the box. Run `npm run db:migrate` against the production database after each deploy
-  that adds a migration. Configure storage (above) so Pro/Business customers can upload files over 4 MB.
-- **Any Node host / Docker:** `npm run build && npm start`.
+**Vercel + Neon/Supabase** works out of the box; **any Node host / Docker** runs `npm run build && npm start`.
+
+Checklist for production:
+
+1. **Database:** a Postgres with pgvector (Neon and Supabase both include it). Use the **pooled** connection string as
+   `DATABASE_URL` (Neon: the `-pooler` host; Supabase: the transaction pooler, port 6543), because every serverless
+   instance opens its own connections. Run `npm run db:migrate` against it once, and again after each deploy that adds a
+   migration.
+2. **Secrets:** generate new `AUTH_SECRET` and `ENCRYPTION_KEY` values (`openssl rand -base64 32`). Never reuse local ones.
+   Changing `ENCRYPTION_KEY` later makes customers' saved API keys unreadable.
+3. **`NEXT_PUBLIC_APP_URL`:** your public URL, e.g. `https://chat.yourdomain.com`. It appears in emails and embed snippets
+   and is built into the app, so **redeploy after changing it**. (On Vercel it falls back to the project's production
+   domain if unset.)
+4. **Email:** either your Gmail account (`SMTP_USER`/`SMTP_PASS`, no domain needed, ~500 emails/day) or Resend with
+   `EMAIL_FROM` on a domain **you own and verified in Resend** (a `*.vercel.app` address can't be verified). Without
+   working email, new customers can't verify, so their chatbots never go live.
+5. **AI keys:** `GEMINI_API_KEY` (required, embeddings) and `GROQ_API_KEY`.
+6. **Optional:** Stripe (see above) and upload storage (Vercel Blob or S3) for files over 4 MB on Vercel.
+7. **Legal pages:** add Terms of Service and a Privacy Policy before taking payments. Stripe asks for them, and the
+   chatbots store your customers' visitors' messages.
+
+**The server refuses to start in production with unsafe settings:** missing `DATABASE_URL`/`GEMINI_API_KEY`, or
+missing, short or placeholder `AUTH_SECRET`/`ENCRYPTION_KEY`. The reason is in the logs (on Vercel: the function
+logs). Missing email, Stripe or storage only log a `[config]` warning, since the app still works without them.
 
 ## How embedding works
 
@@ -145,13 +179,14 @@ Optional attributes: `data-position="left"`, `data-color="#0ea5e9"`, `data-open=
 ```
 src/
   app/
-    api/auth/*            signup, login, logout
+    api/auth/*            signup, login, logout, email verification, password reset
+    api/account/*         profile, change password, delete account
     api/bots/*            bot CRUD, document upload/delete
     api/chat/[botId]      public streaming chat endpoint (RAG)
     api/public/bots/*     widget config (CORS)
     api/billing/*         Stripe checkout + portal
     api/stripe/webhook    subscription sync
-    dashboard/*           customer dashboard (bots, knowledge, playground, conversations, analytics, settings, embed, billing)
+    dashboard/*           customer dashboard (bots, knowledge, playground, conversations, analytics, settings, embed, billing, account)
     embed/[botId]         chat UI loaded inside the widget iframe
   lib/
     ai/                   text extraction, chunking, Gemini embeddings, Gemini/Groq streaming chat, key resolution
@@ -189,6 +224,11 @@ Server-side scripts can fake headers, which is why rate limits exist too.
 The Playground is owner-only and skips visitor limits; it still counts toward the monthly plan quota.
 Client IPs come from `X-Forwarded-For` on Vercel; see below for other hosts.
 
+**Other protections:** every page except `/embed/*` sends `frame-ancestors 'self'` and `X-Frame-Options`, so other sites
+can't load the dashboard in a hidden frame (clickjacking). All responses send `nosniff` and a strict referrer policy.
+`robots.txt` keeps the dashboard, API and chat pages out of search engines. Changing a password signs out all other
+devices.
+
 ## Self-hosting (without Vercel)
 
 "Self-hosting" means running the app on a machine you manage instead of Vercel: a VPS (DigitalOcean, Hetzner, AWS EC2),
@@ -225,4 +265,4 @@ npm run lint      # type check
 - **Website crawling** as a knowledge source, plus OCR for scanned PDFs.
 - **Background ingestion queue** for very large documents (today training runs inside the upload request, up to 5 minutes).
 - **Lead capture / human handoff** and "unanswered questions" reports.
-- **Change email / delete account** self-service.
+- **Change email** self-service (needs re-verification of the new address).

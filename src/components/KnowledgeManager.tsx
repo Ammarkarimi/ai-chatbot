@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { upload as uploadToBlob } from "@vercel/blob/client";
 import { api } from "@/lib/api-client";
+import { LocalTime } from "@/components/LocalTime";
 
 type Doc = {
   id: string;
@@ -255,7 +256,7 @@ export function KnowledgeManager({
                   <p className="truncate text-sm font-medium">{doc.name}</p>
                   <p className="text-xs text-slate-500">
                     {formatSize(doc.sizeBytes)} · {doc.chunkCount} {doc.chunkCount === 1 ? "passage" : "passages"} ·{" "}
-                    {new Date(doc.createdAt).toLocaleDateString()}
+                    <LocalTime iso={doc.createdAt} format="date" />
                   </p>
                   {doc.status === "error" && <p className="mt-1 text-xs text-red-600">{doc.error}</p>}
                 </div>

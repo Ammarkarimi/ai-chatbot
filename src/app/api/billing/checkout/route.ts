@@ -7,7 +7,7 @@ import { priceIdForPlan } from "@/lib/plans";
 import { appUrl, getStripe, stripeEnabled } from "@/lib/stripe";
 import { jsonError } from "@/lib/http";
 
-const schema = z.object({ plan: z.enum(["pro", "business"]) });
+const schema = z.object({ plan: z.enum(["pro", "business"]), currency: z.enum(["usd", "inr"]).default("usd") });
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -16,8 +16,14 @@ export async function POST(req: Request) {
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return jsonError("Invalid plan");
-  const price = priceIdForPlan(parsed.data.plan);
-  if (!price) return jsonError("This plan has no Stripe price configured.", 503);
+  const { plan, currency } = parsed.data;
+  const price = priceIdForPlan(plan, currency);
+  if (!price) {
+    return jsonError(
+      currency === "inr" ? "Payment in rupees isn't available yet. Switch to USD or try again later." : "This plan has no Stripe price configured.",
+      503,
+    );
+  }
 
   const stripe = getStripe();
 

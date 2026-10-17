@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { APP_NAME } from "@/lib/config";
+import { explainSmtpError, smtpConfigured, smtpFrom, smtpTransport } from "@/lib/smtp";
 
 type Email = {
   to: string;
@@ -18,8 +19,18 @@ type Email = {
 
 export class EmailError extends Error {}
 
+/**
+ * SMTP (e.g. your Gmail account) wins when SMTP_USER/SMTP_PASS are set; remove them to use Resend
+ * with your own domain. With neither, emails are only printed to the server log.
+ */
+export function emailProvider(): "smtp" | "resend" | "log" {
+  if (smtpConfigured()) return "smtp";
+  if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) return "resend";
+  return "log";
+}
+
 export function emailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return emailProvider() !== "log";
 }
 
 let client: Resend | null = null;
@@ -32,14 +43,33 @@ function resend() {
 const RETRYABLE = new Set(["rate_limit_exceeded", "application_error", "service_unavailable", "concurrent_idempotent_requests"]);
 
 /**
- * Sends through Resend. Without RESEND_API_KEY / EMAIL_FROM the email is printed to the server
- * log instead, which is handy locally but means users can't verify in production.
- * Returns the Resend email id (or null when only logged).
+ * Sends through SMTP or Resend (see emailProvider). With neither configured the email is printed
+ * to the server log instead, which is handy locally but means users can't verify in production.
+ * Returns the provider's message id (or null when only logged).
  */
 export async function sendEmail(email: Email): Promise<string | null> {
-  if (!emailConfigured()) {
-    console.warn(`[email] RESEND_API_KEY/EMAIL_FROM not set. Would send to ${email.to}:\n${email.subject}\n${email.text}`);
+  const provider = emailProvider();
+  if (provider === "log") {
+    console.warn(`[email] No email provider configured (SMTP_* or RESEND_API_KEY). Would send to ${email.to}:\n${email.subject}\n${email.text}`);
     return null;
+  }
+
+  if (provider === "smtp") {
+    try {
+      const info = await smtpTransport().sendMail({
+        from: smtpFrom(),
+        to: email.to,
+        replyTo: process.env.EMAIL_REPLY_TO || undefined,
+        subject: email.subject,
+        text: email.text,
+        html: email.html,
+        // SMTP has no idempotency keys; this lets you match an email to its token in mail logs.
+        headers: { "X-Entity-Ref-ID": email.idempotencyKey, "X-Category": email.category },
+      });
+      return info.messageId;
+    } catch (err) {
+      throw new EmailError(`SMTP: ${explainSmtpError(err)}`);
+    }
   }
 
   for (let attempt = 1; ; attempt++) {

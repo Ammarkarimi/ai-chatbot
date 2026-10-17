@@ -36,10 +36,13 @@ function hostMatches(host: string, hostname: string, pattern: string) {
 
 /**
  * True when the request origin may use this bot. Our own origin (dashboard, Playground, direct
- * link) always may; other websites only when listed. An empty list means the bot isn't live
- * on any website yet.
+ * link, and the chat iframe itself) always may; other websites only when listed. An empty list
+ * means the bot isn't live on any website yet.
+ *
+ * `selfOrigin` is the origin the request was sent to. A browser only sends that as Origin from
+ * our own pages, so it also covers preview deployments and a misconfigured APP_URL.
  */
-export function isOriginAllowed(origin: string | null | undefined, allowedDomains: string[]) {
+export function isOriginAllowed(origin: string | null | undefined, allowedDomains: string[], selfOrigin?: string) {
   if (!origin || origin === "null") return false;
   let url: URL;
   try {
@@ -47,7 +50,7 @@ export function isOriginAllowed(origin: string | null | undefined, allowedDomain
   } catch {
     return false;
   }
-  if (url.origin === new URL(APP_URL).origin) return true;
+  if (url.origin === new URL(APP_URL).origin || url.origin === selfOrigin) return true;
   return allowedDomains.some((entry) => patterns(entry).some((p) => hostMatches(url.host, url.hostname, p)));
 }
 
