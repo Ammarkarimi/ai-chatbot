@@ -143,8 +143,9 @@ Checklist for production:
 
 1. **Database:** a Postgres with pgvector (Neon and Supabase both include it). Use the **pooled** connection string as
    `DATABASE_URL` (Neon: the `-pooler` host; Supabase: the transaction pooler, port 6543), because every serverless
-   instance opens its own connections. Run `npm run db:migrate` against it once, and again after each deploy that adds a
-   migration.
+   instance opens its own connections. On Vercel, production deploys run the migrations automatically
+   (`npm run vercel-build`); elsewhere run `npm run db:migrate` on each deploy. `vercel.json` runs the functions in
+   Singapore (`sin1`): put the database in the same region, or change both.
 2. **Secrets:** generate new `AUTH_SECRET` and `ENCRYPTION_KEY` values (`openssl rand -base64 32`). Never reuse local ones.
    Changing `ENCRYPTION_KEY` later makes customers' saved API keys unreadable.
 3. **`NEXT_PUBLIC_APP_URL`:** your public URL, e.g. `https://chat.yourdomain.com`. It appears in emails and embed snippets
