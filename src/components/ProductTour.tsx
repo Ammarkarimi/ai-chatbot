@@ -637,8 +637,9 @@ export function ProductTour({ appUrl }: { appUrl: string }) {
         <div ref={frameRef} className="relative overflow-hidden" style={{ height: scale ? H * scale : undefined, aspectRatio: scale ? undefined : `${W} / ${H}` }} aria-hidden="true">
           <div
             ref={canvasRef}
-            className={`absolute left-0 top-0 origin-top-left ${scale ? "" : "invisible"}`}
-            style={{ width: W, height: H, transform: `scale(${scale ?? 1})` }}
+            className="absolute left-0 top-0 origin-top-left"
+            // Until the frame is measured (or if scripts never load), show the first frame unscaled.
+            style={scale ? { width: W, height: H, transform: `scale(${scale})` } : { width: "100%", height: "100%" }}
           >
             <div key={clock.scene} className="h-full">{scene.render(clock.t, appUrl)}</div>
 
