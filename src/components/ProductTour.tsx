@@ -513,12 +513,11 @@ function lastAt<T extends { at: number }>(items: T[], t: number): T {
 
 export function ProductTour({ appUrl }: { appUrl: string }) {
   const [clock, setClock] = useState({ scene: 0, t: 0 });
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(true);
   const [scale, setScale] = useState<number | null>(null);
   const [cursor, setCursor] = useState<Point>([520, 330]);
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const userPaused = useRef(false);
 
   const scene = SCENES[clock.scene];
   const target = lastAt(scene.cursor, clock.t).target;
@@ -530,22 +529,6 @@ export function ProductTour({ appUrl }: { appUrl: string }) {
     const fit = () => setScale(el.clientWidth / W);
     fit();
     const observer = new ResizeObserver(fit);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  // Play while on screen (unless the visitor paused or prefers reduced motion).
-  useEffect(() => {
-    const el = frameRef.current;
-    if (!el) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) setPlaying(false);
-        else if (!userPaused.current && !reduced) setPlaying(true);
-      },
-      { threshold: 0.4 },
-    );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -579,14 +562,8 @@ export function ProductTour({ appUrl }: { appUrl: string }) {
   }, [target, clock.scene, scale]);
 
   function seek(i: number) {
-    userPaused.current = false;
     setClock({ scene: i, t: 0 });
     setPlaying(true);
-  }
-
-  function toggle() {
-    userPaused.current = playing;
-    setPlaying(!playing);
   }
 
   const caption = lastAt(scene.captions, clock.t).text;
@@ -642,6 +619,19 @@ export function ProductTour({ appUrl }: { appUrl: string }) {
           <div className="flex-1 truncate rounded-md bg-white px-3 py-1 text-center text-xs text-slate-500">
             🔒 {scene.url.startsWith("http") ? scene.url.replace(/^https?:\/\//, "") : APP_HOST + scene.url}
           </div>
+          <button
+            type="button"
+            onClick={() => setPlaying(!playing)}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+            aria-label={playing ? "Pause walkthrough" : "Resume walkthrough"}
+            title={playing ? "Pause" : "Resume"}
+          >
+            {playing ? (
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
+            )}
+          </button>
         </div>
 
         <div ref={frameRef} className="relative overflow-hidden" style={{ height: scale ? H * scale : undefined, aspectRatio: scale ? undefined : `${W} / ${H}` }} aria-hidden="true">
@@ -660,7 +650,7 @@ export function ProductTour({ appUrl }: { appUrl: string }) {
                 <span key={clicking} className="absolute -left-4 -top-4 h-8 w-8 animate-tour-click rounded-full bg-brand-500/40" />
               )}
               {dragging && (
-                <span className="absolute left-3 top-4 flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-[10px] font-medium shadow-lg ring-1 ring-slate-200">
+                <span className="absolute left-3 top-4 flex items-center gap-1.5 whitespace-nowrap rounded-md bg-white px-2 py-1 text-[10px] font-medium shadow-lg ring-1 ring-slate-200">
                   <span className="font-bold text-red-600">PDF</span> {dragging.label}
                 </span>
               )}
@@ -669,59 +659,11 @@ export function ProductTour({ appUrl }: { appUrl: string }) {
               </svg>
             </div>
           </div>
-
-          {!playing && (
-            <button
-              type="button"
-              onClick={toggle}
-              className="absolute inset-0 z-30 grid place-items-center bg-slate-900/10 transition hover:bg-slate-900/20"
-              aria-label="Play walkthrough"
-            >
-              <span className="grid h-16 w-16 place-items-center rounded-full bg-brand-600 text-white shadow-xl">
-                <svg viewBox="0 0 24 24" className="ml-1 h-7 w-7" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
-              </span>
-            </button>
-          )}
         </div>
 
-        <div className="flex min-h-11 items-center justify-center bg-slate-900 px-4 py-2.5">
-          <p key={caption} className="animate-fade-in text-center text-sm font-medium text-white">{caption}</p>
-        </div>
-
-        <div className="flex items-center gap-3 px-4 py-2.5">
-          <button
-            type="button"
-            onClick={toggle}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-700 hover:bg-slate-100"
-            aria-label={playing ? "Pause walkthrough" : "Play walkthrough"}
-          >
-            {playing ? (
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M7 4.5v15l12-7.5z" /></svg>
-            )}
-          </button>
-          <div className="flex flex-1 gap-1">
-            {SCENES.map((s, i) => (
-              <button
-                key={s.title}
-                type="button"
-                onClick={() => seek(i)}
-                className="group h-4 flex-1 py-1.5"
-                aria-label={`Step ${i + 1}: ${s.title}`}
-              >
-                <span className="block h-1 overflow-hidden rounded-full bg-slate-200 group-hover:bg-slate-300">
-                  <span
-                    className="block h-full bg-brand-600"
-                    style={{ width: i < clock.scene ? "100%" : i === clock.scene ? `${progress * 100}%` : "0%" }}
-                  />
-                </span>
-              </button>
-            ))}
-          </div>
-          <span className="hidden shrink-0 text-xs tabular-nums text-slate-500 sm:block">
-            Step {clock.scene + 1} of {SCENES.length}
-          </span>
+        <div className="flex min-h-11 items-center justify-center gap-2.5 bg-brand-600 px-4 py-2.5">
+          <span className="shrink-0 rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-semibold text-white">Step {clock.scene + 1}</span>
+          <p key={caption} className="animate-fade-in text-sm font-medium text-white">{caption}</p>
         </div>
       </div>
     </div>

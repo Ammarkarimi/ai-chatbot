@@ -170,10 +170,7 @@ export default async function Home() {
             </p>
             <div className="mt-9 flex flex-wrap justify-center gap-3 lg:justify-start">
               <Link href="/signup" className="btn-primary px-6 py-3 text-base shadow-lg shadow-brand-600/25">Build your chatbot free</Link>
-              <a href="#how" className="btn-secondary px-6 py-3 text-base">
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-brand-600" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" /></svg>
-                Watch how it works
-              </a>
+              <a href="#how" className="btn-secondary px-6 py-3 text-base">See how it works</a>
             </div>
             <ul className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-slate-500 lg:justify-start">
               {["Free plan, no credit card", "Gemini & Groq models", "Works on any website"].map((item) => (
@@ -207,7 +204,7 @@ export default async function Home() {
             <p className="text-sm font-semibold text-brand-600">How it works</p>
             <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">From sign-up to a live chatbot in 6 steps</h2>
             <p className="mt-4 text-slate-600">
-              Watch the whole setup, click by click. Jump to any step, or pause whenever you like.
+              Here’s the whole setup, click by click. Pick any step to jump straight to it.
             </p>
           </div>
           <div className="mt-12">
