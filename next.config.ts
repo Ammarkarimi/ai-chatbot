@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // The dev-mode "N" button would otherwise overlap the chat input inside the widget iframe.
   devIndicators: false,
+  // Let the dev server's scripts load when the site is opened as 127.0.0.1 instead of localhost.
+  allowedDevOrigins: ["127.0.0.1"],
   // Document parsers ship their own worker/binary assets; keep them out of the bundle.
   serverExternalPackages: ["unpdf", "mammoth", "nodemailer"],
   async headers() {
