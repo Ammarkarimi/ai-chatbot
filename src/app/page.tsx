@@ -2,9 +2,13 @@ import Link from "next/link";
 import { Logo, LogoMark } from "@/components/Logo";
 import { PricingTable } from "@/components/PricingTable";
 import { ProductTour } from "@/components/ProductTour";
+import { PLATFORMS, PlatformLogo } from "@/components/PlatformLogos";
+import { SiteAssistant } from "@/components/SiteAssistant";
 import { defaultCurrency } from "@/lib/currency";
 import { APP_NAME, APP_URL } from "@/lib/config";
 import { getCurrentUser } from "@/lib/auth";
+import { CONTACT } from "@/lib/assistant";
+import { AI_MARKUP, AI_RATES, formatAmount, ourCostPer1000 } from "@/lib/plans";
 
 const ICONS = {
   doc: "M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM14 3v5h5M9 13h6M9 17h4",
@@ -37,14 +41,70 @@ const FEATURES: { icon: keyof typeof ICONS; title: string; body: string }[] = [
   { icon: "key", title: "Bring your own API keys", body: "On paid plans, plug in your own Gemini or Groq keys for full cost control." },
 ];
 
-const USE_CASES: { icon: keyof typeof ICONS; title: string; body: string }[] = [
-  { icon: "headset", title: "Customer support", body: "Answer FAQs, policies and how-tos instantly, and free your team for the hard questions." },
-  { icon: "cart", title: "Online stores", body: "Shipping, returns, sizing and product details, answered while the customer is ready to buy." },
-  { icon: "cap", title: "Courses & coaching", body: "Turn your course material into a study buddy that answers students day and night." },
-  { icon: "users", title: "Internal help desk", body: "Give staff one place to ask about HR policies, onboarding and IT guides." },
+// Tailwind needs full class names, so each use case carries its own colors.
+const USE_CASES: {
+  icon: keyof typeof ICONS;
+  title: string;
+  body: string;
+  docs: string;
+  q: string;
+  a: string;
+  badge: string;
+  bubble: string;
+}[] = [
+  {
+    icon: "headset",
+    title: "Customer support",
+    body: "Answer FAQs, policies and how-tos instantly, and free your team for the hard questions.",
+    docs: "Help center, policies, product guides",
+    q: "How do I reset my password?",
+    a: "Click “Forgot password” on the login page and we’ll email you a reset link within a minute.",
+    badge: "bg-sky-100 text-sky-700",
+    bubble: "bg-sky-600",
+  },
+  {
+    icon: "cart",
+    title: "Online stores",
+    body: "Shipping, returns, sizing and product details, answered while the customer is ready to buy.",
+    docs: "Shipping & returns policy, size charts, catalog",
+    q: "Do you ship to Canada?",
+    a: "Yes! International orders arrive in 5–8 business days, and shipping is free over $75.",
+    badge: "bg-emerald-100 text-emerald-700",
+    bubble: "bg-emerald-600",
+  },
+  {
+    icon: "cap",
+    title: "Courses & coaching",
+    body: "Turn your course material into a study buddy that answers students day and night.",
+    docs: "Syllabus, lesson notes, course FAQ",
+    q: "What does module 3 cover?",
+    a: "Module 3 is all about pricing: value-based pricing, anchoring and a hands-on worksheet.",
+    badge: "bg-amber-100 text-amber-700",
+    bubble: "bg-amber-600",
+  },
+  {
+    icon: "users",
+    title: "Internal help desk",
+    body: "Give staff one place to ask about HR policies, onboarding and IT guides.",
+    docs: "Employee handbook, IT guides, onboarding docs",
+    q: "How many leave days do I get?",
+    a: "Full-time staff get 24 paid leave days a year plus public holidays. Apply in the HR portal.",
+    badge: "bg-violet-100 text-violet-700",
+    bubble: "bg-violet-600",
+  },
 ];
 
-const PLATFORMS = ["WordPress", "Shopify", "Webflow", "Wix", "Squarespace", "Framer", "Plain HTML"];
+function SectionHeading({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle?: string }) {
+  return (
+    <div className="mx-auto max-w-2xl text-center">
+      <p className="inline-block rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
+        {eyebrow}
+      </p>
+      <h2 className="mt-4 text-balance text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">{title}</h2>
+      {subtitle && <p className="mt-4 text-balance text-lg text-slate-600">{subtitle}</p>}
+    </div>
+  );
+}
 
 const FAQS = [
   {
@@ -65,11 +125,19 @@ const FAQS = [
   },
   {
     q: "Do I need my own Gemini or Groq API key?",
-    a: "No, everything works out of the box. On paid plans you can optionally add your own keys per chatbot to pay the AI provider directly.",
+    a: "No, everything works out of the box on our AI, starting with your plan's monthly AI credit. On Pro and Business you can optionally add your own keys per chatbot and pay the AI provider directly.",
+  },
+  {
+    q: "How is AI usage charged?",
+    a: `Your plan covers the platform and includes a monthly AI credit. After that, AI tokens cost ${AI_MARKUP}× the provider's list price: about ${formatAmount(ourCostPer1000(AI_RATES[0]), "usd")} per 1,000 replies on Groq or ${formatAmount(ourCostPer1000(AI_RATES[1]), "usd")} on Gemini. With your own API key, we charge nothing for AI.`,
   },
   {
     q: "Can I cancel any time?",
     a: "Yes. Plans are billed monthly and you can cancel or change plans from the Billing page whenever you like. The free plan is free forever.",
+  },
+  {
+    q: "Who builds BotForge? Can you build something custom for us?",
+    a: `${APP_NAME} is built by IntelliForge, an AI solutions company in Ahmedabad, India. IntelliForge also builds custom chatbots, AI automation, machine learning and web apps. Call ${CONTACT.phone}, email ${CONTACT.email} or visit intelliforgeai.vercel.app for a free consultation.`,
   },
 ];
 
@@ -132,7 +200,7 @@ export default async function Home() {
           <nav className="flex items-center gap-1 text-sm sm:gap-2">
             {[
               ["#how", "How it works"],
-              ["#features", "Features"],
+              ["#use-cases", "Use cases"],
               ["#pricing", "Pricing"],
               ["#faq", "FAQ"],
             ].map(([href, label]) => (
@@ -187,12 +255,22 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="border-y border-slate-100 bg-slate-50/60 py-8">
+      <section className="border-y border-slate-100 bg-slate-50/70 py-16 sm:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <p className="text-center text-xs font-medium uppercase tracking-widest text-slate-400">Add it to any website in one paste</p>
-          <ul className="mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+          <SectionHeading
+            eyebrow="Integrations"
+            title="Works with the website you already have"
+            subtitle="Add it to any of these with one copy-paste. No plugins and no developer needed."
+          />
+          <ul className="mt-10 flex flex-wrap justify-center gap-3">
             {PLATFORMS.map((p) => (
-              <li key={p} className="text-base font-semibold text-slate-400">{p}</li>
+              <li
+                key={p.name}
+                className="flex w-[calc(50%-0.375rem)] flex-col items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:w-36"
+              >
+                <PlatformLogo path={p.path} color={p.color} className="h-9 w-9" />
+                <span className="text-sm font-semibold text-slate-700">{p.name}</span>
+              </li>
             ))}
           </ul>
         </div>
@@ -200,13 +278,11 @@ export default async function Home() {
 
       <section id="how" className="scroll-mt-16 bg-linear-to-b from-white to-slate-50 py-20 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold text-brand-600">How it works</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">From sign-up to a live chatbot in 6 steps</h2>
-            <p className="mt-4 text-slate-600">
-              Here’s the whole setup, click by click. Pick any step to jump straight to it.
-            </p>
-          </div>
+          <SectionHeading
+            eyebrow="How it works"
+            title="From sign-up to a live chatbot in 6 steps"
+            subtitle="Here’s the whole setup, click by click. Pick any step to jump straight to it."
+          />
           <div className="mt-12">
             <ProductTour appUrl={APP_URL} />
           </div>
@@ -215,10 +291,11 @@ export default async function Home() {
 
       <section id="features" className="scroll-mt-16 py-20 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold text-brand-600">Features</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Everything you need, nothing you don&apos;t</h2>
-          </div>
+          <SectionHeading
+            eyebrow="Features"
+            title="Everything you need, nothing you don’t"
+            subtitle="All the tools to launch, run and improve an AI assistant on your website."
+          />
           <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
               <div key={f.title} className="card p-6 transition hover:-translate-y-0.5 hover:shadow-md">
@@ -233,44 +310,59 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="bg-slate-900 py-20 text-white sm:py-24">
+      <section id="use-cases" className="scroll-mt-16 bg-slate-50 py-20 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold text-brand-200">Use cases</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">One bot, many jobs</h2>
-            <p className="mt-4 text-slate-300">If the answers live in a document, {APP_NAME} can give them out, instantly.</p>
-          </div>
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <SectionHeading
+            eyebrow="Use cases"
+            title="One bot, many jobs"
+            subtitle={`If the answers live in a document, ${APP_NAME} can give them out, instantly. Here’s what that looks like.`}
+          />
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
             {USE_CASES.map((u) => (
-              <div key={u.title} className="rounded-xl border border-white/10 bg-white/5 p-6">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-500/20 text-brand-200">
-                  <Icon name={u.icon} />
-                </span>
-                <h3 className="mt-4 font-semibold">{u.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-300">{u.body}</p>
+              <div key={u.title} className="card flex flex-col p-6 transition hover:-translate-y-0.5 hover:shadow-md sm:p-7">
+                <div className="flex items-center gap-3">
+                  <span className={`grid h-11 w-11 place-items-center rounded-xl ${u.badge}`}>
+                    <Icon name={u.icon} />
+                  </span>
+                  <h3 className="text-lg font-semibold">{u.title}</h3>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">{u.body}</p>
+                <div className="mt-5 flex-1 space-y-2.5 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+                  <p className={`ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 text-sm text-white ${u.bubble}`}>{u.q}</p>
+                  <p className="w-fit max-w-[90%] rounded-2xl rounded-bl-sm bg-white px-3.5 py-2 text-sm text-slate-700 shadow-sm ring-1 ring-slate-100">
+                    {u.a}
+                  </p>
+                </div>
+                <p className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+                  <Icon name="doc" className="h-4 w-4 shrink-0" /> Trained on: {u.docs}
+                </p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="pricing" className="scroll-mt-16 bg-slate-50 py-20 sm:py-24">
+      <section id="pricing" className="scroll-mt-16 py-20 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold text-brand-600">Pricing</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Simple pricing</h2>
-            <p className="mt-3 text-slate-600">Start free. Upgrade when your chatbot gets busy.</p>
-          </div>
-          <div className="mt-8">
+          <SectionHeading
+            eyebrow="Pricing"
+            title="Simple, transparent pricing"
+            subtitle="Start free. Pay for the platform, and only for the AI you actually use."
+          />
+          <div className="mt-10">
             <PricingTable variant="landing" defaultCurrency={await defaultCurrency()} />
           </div>
         </div>
       </section>
 
-      <section id="faq" className="scroll-mt-16 py-20 sm:py-24">
+      <section id="faq" className="scroll-mt-16 bg-slate-50 py-20 sm:py-24">
         <div className="mx-auto max-w-3xl px-4 sm:px-6">
-          <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">Frequently asked questions</h2>
-          <div className="mt-10 divide-y divide-slate-200 rounded-2xl border border-slate-200">
+          <SectionHeading
+            eyebrow="FAQ"
+            title="Frequently asked questions"
+            subtitle="Can’t find your answer? Ask our AI assistant in the corner, or contact us directly."
+          />
+          <div className="mt-10 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
             {FAQS.map((f) => (
               <details key={f.q} className="group p-5 [&_summary::-webkit-details-marker]:hidden">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">
@@ -284,7 +376,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="px-4 pb-20 sm:px-6 sm:pb-24">
+      <section className="bg-slate-50 px-4 pb-20 sm:px-6 sm:pb-24">
         <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-linear-to-br from-brand-600 to-fuchsia-600 px-6 py-14 text-center text-white shadow-xl sm:px-12">
           <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-white/10" />
           <div className="absolute -bottom-16 -left-10 h-56 w-56 rounded-full bg-white/10" />
@@ -298,18 +390,46 @@ export default async function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-slate-100">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 text-sm text-slate-500 sm:flex-row sm:px-6">
-          <Logo />
-          <nav className="flex gap-5">
-            <a href="#how" className="hover:text-slate-900">How it works</a>
-            <a href="#pricing" className="hover:text-slate-900">Pricing</a>
-            <Link href="/login" className="hover:text-slate-900">Log in</Link>
-            <Link href="/signup" className="hover:text-slate-900">Sign up</Link>
-          </nav>
-          <p>© {new Date().getFullYear()} {APP_NAME}</p>
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 text-sm sm:px-6 md:grid-cols-[1.4fr_1fr_1.2fr]">
+          <div>
+            <Logo />
+            <p className="mt-4 max-w-xs text-slate-600">AI chatbots trained on your documents, live on your website in minutes.</p>
+            <p className="mt-4 text-slate-500">
+              A product by{" "}
+              <a href={CONTACT.website} target="_blank" rel="noopener noreferrer" className="font-semibold text-slate-800 hover:text-brand-700">
+                IntelliForge
+              </a>
+            </p>
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-900">Product</h3>
+            <ul className="mt-4 space-y-2.5 text-slate-600">
+              <li><a href="#how" className="hover:text-slate-900">How it works</a></li>
+              <li><a href="#use-cases" className="hover:text-slate-900">Use cases</a></li>
+              <li><a href="#pricing" className="hover:text-slate-900">Pricing</a></li>
+              <li><Link href="/signup" className="hover:text-slate-900">Get started free</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-900">Contact IntelliForge</h3>
+            <ul className="mt-4 space-y-2.5 text-slate-600">
+              <li><a href={`mailto:${CONTACT.email}`} className="hover:text-slate-900">{CONTACT.email}</a></li>
+              <li><a href={`tel:${CONTACT.phone.replace(/\s/g, "")}`} className="hover:text-slate-900">{CONTACT.phone}</a></li>
+              <li>
+                <a href={CONTACT.website} target="_blank" rel="noopener noreferrer" className="hover:text-slate-900">
+                  intelliforgeai.vercel.app
+                </a>
+              </li>
+              <li className="text-slate-500">Ahmedabad, India</li>
+            </ul>
+          </div>
+        </div>
+        <div className="border-t border-slate-100 py-5 text-center text-xs text-slate-500">
+          © {new Date().getFullYear()} {APP_NAME} by IntelliForge. All rights reserved.
         </div>
       </footer>
+      <SiteAssistant />
     </div>
   );
 }

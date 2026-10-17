@@ -4,6 +4,9 @@ import { GEMINI_BASE, GROQ_BASE, geminiKeyFor, groqKeyFor } from "./keys";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+/** Everything a provider call needs, so callers without a bot (the site assistant) can stream too. */
+export type ChatOptions = { provider: Bot["provider"]; model: string; temperature: number; apiKey: string };
+
 export function defaultModel(provider: Bot["provider"]) {
   return provider === "groq"
     ? (process.env.GROQ_CHAT_MODEL ?? "openai/gpt-oss-120b")
@@ -29,13 +32,13 @@ async function* sseData(body: ReadableStream<Uint8Array>) {
   if (buffer.trim().startsWith("data:")) yield buffer.trim().slice(5).trim();
 }
 
-async function* streamGroq(bot: Bot, system: string, turns: ChatTurn[]) {
+async function* streamGroq(o: ChatOptions, system: string, turns: ChatTurn[]) {
   const res = await fetch(`${GROQ_BASE}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKeyFor(bot)}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${o.apiKey}` },
     body: JSON.stringify({
-      model: bot.model || defaultModel("groq"),
-      temperature: bot.temperature,
+      model: o.model,
+      temperature: o.temperature,
       max_tokens: 1024,
       stream: true,
       messages: [{ role: "system", content: system }, ...turns],
@@ -50,18 +53,17 @@ async function* streamGroq(bot: Bot, system: string, turns: ChatTurn[]) {
   }
 }
 
-async function* streamGemini(bot: Bot, system: string, turns: ChatTurn[]) {
-  const model = bot.model || defaultModel("gemini");
-  const res = await fetch(`${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`, {
+async function* streamGemini(o: ChatOptions, system: string, turns: ChatTurn[]) {
+  const res = await fetch(`${GEMINI_BASE}/models/${o.model}:streamGenerateContent?alt=sse`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKeyFor(bot) },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": o.apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents: turns.map((t) => ({
         role: t.role === "assistant" ? "model" : "user",
         parts: [{ text: t.content }],
       })),
-      generationConfig: { temperature: bot.temperature, maxOutputTokens: 1024 },
+      generationConfig: { temperature: o.temperature, maxOutputTokens: 1024 },
     }),
   });
   if (!res.ok || !res.body) throw new Error(`Gemini chat failed (${res.status}): ${await res.text()}`);
@@ -73,6 +75,15 @@ async function* streamGemini(bot: Bot, system: string, turns: ChatTurn[]) {
   }
 }
 
+export function streamWith(o: ChatOptions, system: string, turns: ChatTurn[]) {
+  return o.provider === "groq" ? streamGroq(o, system, turns) : streamGemini(o, system, turns);
+}
+
 export function streamChat(bot: Bot, system: string, turns: ChatTurn[]) {
-  return bot.provider === "groq" ? streamGroq(bot, system, turns) : streamGemini(bot, system, turns);
+  const apiKey = bot.provider === "groq" ? groqKeyFor(bot) : geminiKeyFor(bot);
+  return streamWith(
+    { provider: bot.provider, model: bot.model || defaultModel(bot.provider), temperature: bot.temperature, apiKey },
+    system,
+    turns,
+  );
 }
