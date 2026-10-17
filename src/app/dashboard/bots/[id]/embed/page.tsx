@@ -1,16 +1,38 @@
 import { loadOwnedBot } from "@/lib/bot-access";
 import { APP_URL } from "@/lib/config";
 import { CopyButton } from "@/components/CopyButton";
+import { isBotLive } from "@/lib/domains";
+import Link from "next/link";
 
 export default async function EmbedCodePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { bot } = await loadOwnedBot(id);
+  const { bot, user } = await loadOwnedBot(id);
   const snippet = `<script src="${APP_URL}/widget.js" data-bot-id="${bot.id}" defer></script>`;
   const iframe = `<iframe src="${APP_URL}/embed/${bot.id}" width="400" height="600" style="border:0;border-radius:12px" title="${bot.name}"></iframe>`;
   const link = `${APP_URL}/embed/${bot.id}`;
 
   return (
     <div className="space-y-6">
+      {isBotLive(bot.allowedDomains, Boolean(user.emailVerifiedAt)) ? (
+        <p className="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-800">
+          <strong>Live</strong> on: {bot.allowedDomains.join(", ")}.{" "}
+          <Link href={`/dashboard/bots/${bot.id}/settings`} className="font-medium underline">Change</Link>
+        </p>
+      ) : (
+        <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">Not live yet. To show the chatbot on your website:</p>
+          <ul className="mt-2 space-y-1">
+            <li>{user.emailVerifiedAt ? "✅" : "⬜"} Verify your email (check your inbox)</li>
+            <li>
+              {bot.allowedDomains.length > 0 ? "✅" : "⬜"}{" "}
+              <Link href={`/dashboard/bots/${bot.id}/settings`} className="font-medium underline">
+                Add your website&apos;s domain
+              </Link>{" "}
+              in Settings → Website security
+            </li>
+          </ul>
+        </div>
+      )}
       <div className="card p-6">
         <h2 className="font-semibold">Add the chat bubble to your website</h2>
         <p className="mt-1 text-sm text-slate-600">

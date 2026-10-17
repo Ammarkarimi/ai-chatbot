@@ -2,8 +2,19 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api-client";
+import type { Currency } from "@/lib/plans";
 
-export function UpgradeButton({ plan, label, primary }: { plan: "pro" | "business"; label: string; primary?: boolean }) {
+export function UpgradeButton({
+  plan,
+  currency,
+  label,
+  primary,
+}: {
+  plan: "pro" | "business";
+  currency: Currency;
+  label: string;
+  primary?: boolean;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -15,7 +26,7 @@ export function UpgradeButton({ plan, label, primary }: { plan: "pro" | "busines
           setLoading(true);
           setError("");
           try {
-            const { url } = await api<{ url: string }>("/api/billing/checkout", { method: "POST", json: { plan } });
+            const { url } = await api<{ url: string }>("/api/billing/checkout", { method: "POST", json: { plan, currency } });
             window.location.href = url;
           } catch (err) {
             setError((err as Error).message);

@@ -4,6 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db, conversations, messages } from "@/lib/db";
 import { loadOwnedBot } from "@/lib/bot-access";
 import { Markdown } from "@/components/Markdown";
+import { LocalTime } from "@/components/LocalTime";
 
 export default async function ConversationPage({ params }: { params: Promise<{ id: string; cid: string }> }) {
   const { id, cid } = await params;
@@ -25,7 +26,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       </Link>
       <div className="card p-6">
         <div className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
-          <span>Started {conv.createdAt.toLocaleString()}</span>
+          <span>Started <LocalTime iso={conv.createdAt.toISOString()} /></span>
           <span>Source: {conv.source}</span>
           {conv.pageUrl && <span className="truncate">Page: {conv.pageUrl}</span>}
           <span>Visitor: {conv.visitorId.slice(0, 8)}</span>
@@ -41,7 +42,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
               >
                 {m.role === "assistant" ? <Markdown text={m.content} /> : <p className="whitespace-pre-wrap">{m.content}</p>}
                 <p className={`mt-1 text-[10px] ${m.role === "user" ? "text-white/70" : "text-slate-400"}`}>
-                  {m.createdAt.toLocaleTimeString()}
+                  <LocalTime iso={m.createdAt.toISOString()} format="time" />
                 </p>
               </div>
             </div>

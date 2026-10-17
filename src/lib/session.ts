@@ -11,18 +11,23 @@ function secretKey() {
 }
 
 export async function signSession(userId: string) {
-  return new SignJWT({ sub: userId })
+  // Millisecond issue time, so a password reset can revoke sessions created moments before it.
+  return new SignJWT({ sub: userId, iatMs: Date.now() })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_MAX_AGE}s`)
     .sign(secretKey());
 }
 
-export async function verifySession(token: string | undefined): Promise<string | null> {
+export type SessionPayload = { userId: string; issuedAt: number /* ms */ };
+
+export async function verifySession(token: string | undefined): Promise<SessionPayload | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
-    return typeof payload.sub === "string" ? payload.sub : null;
+    if (typeof payload.sub !== "string" || typeof payload.iat !== "number") return null;
+    const issuedAt = typeof payload.iatMs === "number" ? payload.iatMs : payload.iat * 1000;
+    return { userId: payload.sub, issuedAt };
   } catch {
     return null;
   }

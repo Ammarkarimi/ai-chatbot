@@ -9,12 +9,14 @@ import {
   index,
   pgEnum,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const EMBEDDING_DIMENSIONS = 768;
 
 export const planEnum = pgEnum("plan", ["free", "pro", "business"]);
 export const providerEnum = pgEnum("provider", ["groq", "gemini"]);
-export const docStatusEnum = pgEnum("doc_status", ["processing", "ready", "error"]);
+export const docStatusEnum = pgEnum("doc_status", ["uploading", "processing", "ready", "error"]);
+export const tokenTypeEnum = pgEnum("email_token_type", ["verify_email", "reset_password"]);
 export const roleEnum = pgEnum("message_role", ["user", "assistant"]);
 export const positionEnum = pgEnum("widget_position", ["right", "left"]);
 
@@ -23,6 +25,9 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  // Sessions issued before this moment are rejected (set on password reset).
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
   plan: planEnum("plan").notNull().default("free"),
   stripeCustomerId: text("stripe_customer_id").unique(),
   stripeSubscriptionId: text("stripe_subscription_id"),
@@ -48,6 +53,10 @@ export const bots = pgTable(
     // Empty string means "use the platform default for the provider".
     model: text("model").notNull().default(""),
     temperature: real("temperature").notNull().default(0.3),
+    // Websites allowed to embed the bot, e.g. ["example.com", "*.shop.io"]. Empty = any site.
+    allowedDomains: text("allowed_domains").array().notNull().default(sql`'{}'::text[]`),
+    // Max questions one visitor may ask per day.
+    visitorDailyLimit: integer("visitor_daily_limit").notNull().default(50),
     // Optional customer-supplied keys, AES-256-GCM encrypted.
     geminiApiKeyEnc: text("gemini_api_key_enc"),
     groqApiKeyEnc: text("groq_api_key_enc"),
@@ -67,6 +76,8 @@ export const documents = pgTable(
     name: text("name").notNull(),
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes").notNull().default(0),
+    // Object key while a direct-to-storage upload is pending processing.
+    storageKey: text("storage_key"),
     charCount: integer("char_count").notNull().default(0),
     chunkCount: integer("chunk_count").notNull().default(0),
     status: docStatusEnum("status").notNull().default("processing"),
@@ -136,6 +147,35 @@ export const messages = pgTable(
     index("messages_user_created_idx").on(t.userId, t.createdAt),
     index("messages_bot_created_idx").on(t.botId, t.createdAt),
   ],
+);
+
+export const emailTokens = pgTable(
+  "email_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: tokenTypeEnum("type").notNull(),
+    // sha256 of the token; the raw token only ever exists in the email link.
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("email_tokens_user_idx").on(t.userId, t.type)],
+);
+
+// Fixed-window counters for rate limiting (shared across serverless instances).
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").primaryKey(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("rate_limits_expires_idx").on(t.expiresAt)],
 );
 
 export type User = typeof users.$inferSelect;

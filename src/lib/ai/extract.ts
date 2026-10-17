@@ -4,14 +4,17 @@ export const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md", ".csv"] as 
 
 export class UnsupportedFileError extends Error {}
 
-function extension(name: string) {
+export function extension(name: string) {
   const i = name.lastIndexOf(".");
   return i >= 0 ? name.slice(i).toLowerCase() : "";
 }
 
-export async function extractText(file: File): Promise<string> {
-  const ext = extension(file.name);
-  const buffer = Buffer.from(await file.arrayBuffer());
+export function isSupported(name: string) {
+  return (SUPPORTED_EXTENSIONS as readonly string[]).includes(extension(name));
+}
+
+export async function extractText(name: string, buffer: Buffer): Promise<string> {
+  const ext = extension(name);
 
   if (ext === ".pdf") {
     const { extractText: extractPdf, getDocumentProxy } = await import("unpdf");
@@ -30,5 +33,5 @@ export async function extractText(file: File): Promise<string> {
   if (ext === ".doc") {
     throw new UnsupportedFileError("Legacy .doc files aren't supported. Save the file as .docx or PDF and upload again.");
   }
-  throw new UnsupportedFileError(`Unsupported file type "${ext || file.type}". Use PDF, DOCX, TXT, MD or CSV.`);
+  throw new UnsupportedFileError(`Unsupported file type "${ext || name}". Use PDF, DOCX, TXT, MD or CSV.`);
 }

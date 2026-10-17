@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
-import { PLANS } from "@/lib/plans";
+import { PricingTable } from "@/components/PricingTable";
+import { defaultCurrency } from "@/lib/currency";
 import { APP_NAME } from "@/lib/config";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -88,24 +89,8 @@ export default async function Home() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <h2 className="text-center text-3xl font-bold">Simple pricing</h2>
           <p className="mt-3 text-center text-slate-600">Start free. Upgrade when your chatbot gets busy.</p>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {Object.values(PLANS).map((plan) => (
-              <div key={plan.id} className={`card flex flex-col p-6 ${plan.id === "pro" ? "ring-2 ring-brand-600" : ""}`}>
-                <h3 className="text-lg font-semibold">{plan.name}</h3>
-                <p className="mt-4 text-4xl font-bold">
-                  ${plan.priceMonthly}
-                  <span className="text-base font-normal text-slate-500">/mo</span>
-                </p>
-                <ul className="mt-6 flex-1 space-y-2 text-sm text-slate-600">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex gap-2"><span className="text-brand-600">✓</span>{f}</li>
-                  ))}
-                </ul>
-                <Link href="/signup" className={`mt-8 ${plan.id === "pro" ? "btn-primary" : "btn-secondary"}`}>
-                  {plan.priceMonthly === 0 ? "Start free" : `Choose ${plan.name}`}
-                </Link>
-              </div>
-            ))}
+          <div className="mt-8">
+            <PricingTable variant="landing" defaultCurrency={await defaultCurrency()} />
           </div>
         </div>
       </section>

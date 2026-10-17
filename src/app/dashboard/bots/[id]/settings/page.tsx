@@ -18,6 +18,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
         provider: bot.provider,
         model: bot.model,
         temperature: bot.temperature,
+        allowedDomains: bot.allowedDomains,
+        visitorDailyLimit: bot.visitorDailyLimit,
       }}
       hasGeminiKey={Boolean(bot.geminiApiKeyEnc)}
       hasGroqKey={Boolean(bot.groqApiKeyEnc)}

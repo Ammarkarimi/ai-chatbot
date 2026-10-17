@@ -2,14 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 import { api } from "@/lib/api-client";
+import { LocalTime } from "@/components/LocalTime";
 
 type Doc = {
   id: string;
   name: string;
   sizeBytes: number;
   chunkCount: number;
-  status: "processing" | "ready" | "error";
+  status: "uploading" | "processing" | "ready" | "error";
   error: string | null;
   createdAt: string;
 };
@@ -22,32 +24,89 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** PUTs the file to a presigned storage URL, reporting progress (fetch can't report upload progress). */
+function putWithProgress(url: string, file: File, onProgress: (pct: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
+    xhr.onerror = () => reject(new Error("Upload failed. Check your connection (or the storage bucket's CORS settings)."));
+    xhr.send(file);
+  });
+}
+
 export function KnowledgeManager({
   botId,
   docs,
   maxDocs,
   maxFileMb,
+  uploadMode,
 }: {
   botId: string;
   docs: Doc[];
   maxDocs: number;
   maxFileMb: number;
+  uploadMode: "vercel-blob" | "s3" | "none";
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"file" | "text">("file");
   const [dragging, setDragging] = useState(false);
-  const [queue, setQueue] = useState<string[]>([]);
+  // label -> upload progress (0-100), or null while the bot is training on it
+  const [queue, setQueue] = useState<Record<string, number | null>>({});
   const [error, setError] = useState("");
 
+  const track = (label: string, value: number | null) => setQueue((q) => ({ ...q, [label]: value }));
+  const untrack = (label: string) =>
+    setQueue((q) => {
+      const { [label]: _, ...rest } = q;
+      return rest;
+    });
+
   async function upload(body: FormData, label: string) {
-    setQueue((q) => [...q, label]);
+    track(label, null);
     try {
       await api(`/api/bots/${botId}/documents`, { method: "POST", body });
     } catch (err) {
       setError(`${label}: ${(err as Error).message}`);
     } finally {
-      setQueue((q) => q.filter((l) => l !== label));
+      untrack(label);
+      router.refresh();
+    }
+  }
+
+  /** Large-file path: browser -> Vercel Blob or S3 directly, then the server trains from there. */
+  async function uploadDirect(file: File) {
+    track(file.name, 0);
+    let documentId: string | null = null;
+    try {
+      const start = await api<{ documentId: string; pathname?: string; uploadUrl?: string }>(
+        `/api/bots/${botId}/uploads`,
+        { method: "POST", json: { name: file.name, size: file.size, contentType: file.type } },
+      );
+      documentId = start.documentId;
+      router.refresh();
+      if (start.pathname) {
+        await uploadToBlob(start.pathname, file, {
+          access: "private",
+          handleUploadUrl: "/api/blob-upload",
+          clientPayload: JSON.stringify({ documentId }),
+          multipart: file.size > 8 * 1024 * 1024, // parallel, retried chunks for big files
+          onUploadProgress: ({ percentage }) => track(file.name, Math.round(percentage)),
+        });
+      } else {
+        await putWithProgress(start.uploadUrl!, file, (pct) => track(file.name, pct));
+      }
+      track(file.name, null);
+      await api(`/api/bots/${botId}/documents/${documentId}/process`, { method: "POST" });
+      documentId = null;
+    } catch (err) {
+      setError(`${file.name}: ${(err as Error).message}`);
+      // Don't leave a half-finished upload counting against the document limit.
+      if (documentId) await api(`/api/bots/${botId}/documents/${documentId}`, { method: "DELETE" }).catch(() => {});
+    } finally {
+      untrack(file.name);
       router.refresh();
     }
   }
@@ -59,9 +118,13 @@ export function KnowledgeManager({
         setError(`${file.name}: larger than the ${maxFileMb} MB limit.`);
         continue;
       }
-      const body = new FormData();
-      body.append("file", file);
-      await upload(body, file.name);
+      if (uploadMode !== "none") {
+        await uploadDirect(file);
+      } else {
+        const body = new FormData();
+        body.append("file", file);
+        await upload(body, file.name);
+      }
     }
   }
 
@@ -152,16 +215,23 @@ export function KnowledgeManager({
           <form onSubmit={submitText} className="mt-6 space-y-3">
             <input name="title" className="input" placeholder="Title (e.g. Shipping policy)" maxLength={200} />
             <textarea name="text" required rows={8} className="input" placeholder="Paste your content here…" />
-            <button className="btn-primary" disabled={queue.length > 0}>Add to knowledge base</button>
+            <button className="btn-primary" disabled={Object.keys(queue).length > 0}>Add to knowledge base</button>
           </form>
         )}
 
-        {queue.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {queue.map((label) => (
-              <div key={label} className="flex items-center gap-2 text-sm text-slate-600">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
-                Training on {label}…
+        {Object.keys(queue).length > 0 && (
+          <div className="mt-4 space-y-3">
+            {Object.entries(queue).map(([label, pct]) => (
+              <div key={label} className="text-sm text-slate-600">
+                <div className="flex items-center gap-2">
+                  <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+                  <span className="truncate">{pct === null ? `Training on ${label}…` : `Uploading ${label}… ${pct}%`}</span>
+                </div>
+                {pct !== null && (
+                  <div className="ml-6 mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -186,7 +256,7 @@ export function KnowledgeManager({
                   <p className="truncate text-sm font-medium">{doc.name}</p>
                   <p className="text-xs text-slate-500">
                     {formatSize(doc.sizeBytes)} · {doc.chunkCount} {doc.chunkCount === 1 ? "passage" : "passages"} ·{" "}
-                    {new Date(doc.createdAt).toLocaleDateString()}
+                    <LocalTime iso={doc.createdAt} format="date" />
                   </p>
                   {doc.status === "error" && <p className="mt-1 text-xs text-red-600">{doc.error}</p>}
                 </div>
@@ -200,7 +270,13 @@ export function KnowledgeManager({
                           : "bg-amber-50 text-amber-700"
                     }`}
                   >
-                    {doc.status === "ready" ? "Trained" : doc.status === "error" ? "Failed" : "Processing"}
+                    {doc.status === "ready"
+                      ? "Trained"
+                      : doc.status === "error"
+                        ? "Failed"
+                        : doc.status === "uploading"
+                          ? "Uploading"
+                          : "Processing"}
                   </span>
                   <button onClick={() => remove(doc)} className="text-sm text-slate-400 hover:text-red-600">Remove</button>
                 </div>

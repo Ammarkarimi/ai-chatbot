@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { getPlan } from "@/lib/plans";
 import { monthlyMessageCount } from "@/lib/usage";
 import { UsageMeter } from "@/components/UsageMeter";
+import { isBotLive } from "@/lib/domains";
 
 export const metadata = { title: "Chatbots" };
 
@@ -65,10 +66,15 @@ export default async function DashboardPage() {
             <Link key={bot.id} href={`/dashboard/bots/${bot.id}`} className="card p-5 transition hover:border-brand-500">
               <div className="flex items-center gap-3">
                 <span className="h-9 w-9 shrink-0 rounded-full" style={{ background: bot.primaryColor }} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h3 className="truncate font-semibold">{bot.name}</h3>
                   <p className="text-xs capitalize text-slate-500">{bot.provider}</p>
                 </div>
+                {isBotLive(bot.allowedDomains, Boolean(user.emailVerifiedAt)) ? (
+                  <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Live</span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Setup needed</span>
+                )}
               </div>
               <div className="mt-4 flex gap-4 text-sm text-slate-600">
                 <span>{docsBy.get(bot.id) ?? 0} documents</span>
